@@ -28,9 +28,6 @@
   onEditClick={startEntryEdit}
   onPinClick={alterEntryPinnedField}
 />
-<pre>
-  {JSON.stringify($entries)}
-</pre>
 {#if $hasNext}
   <LoadMore onClick={() => loadEntries()} />
 {/if}

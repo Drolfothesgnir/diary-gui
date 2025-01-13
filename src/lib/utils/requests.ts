@@ -1,5 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { EntrySchema } from "../../types";
+import type { EntrySchema, Pagination } from "../../types";
+
+export type CommandResponse<T> = {
+  data: T | null;
+  error: string | null;
+};
 
 export async function getEntries(
   page: number = 1,
@@ -8,37 +13,51 @@ export async function getEntries(
   s?: string,
   sort = "last"
 ) {
-  const response: { items: EntrySchema[]; has_next: boolean } = await invoke(
-    "read_entries",
-    {
-      page,
-      per_page,
-      pinned,
-      s,
-      sort,
-    }
-  );
+  const response: CommandResponse<Pagination> = await invoke("read_entries", {
+    page,
+    per_page,
+    pinned,
+    s,
+    sort,
+  });
 
-  return response;
+  if (response.error) {
+    throw response.error;
+  }
+
+  return response.data!;
 }
 
-export async function createEntry(content: string, pinned?: boolean) {
-  const response: EntrySchema = await invoke("create_entry", {
+export async function createEntry(content: string, pinned: boolean = false) {
+  const response: CommandResponse<EntrySchema> = await invoke("create_entry", {
     content,
     pinned,
   });
-  return response;
+
+  if (response.error) {
+    throw response.error;
+  }
+
+  return response.data!;
 }
 
 export async function deleteEntry(id: number) {
-  await invoke("delete_entry", { id });
+  const response: CommandResponse<void> = await invoke("delete_entry", { id });
+  if (response.error) {
+    throw response.error;
+  }
 }
 
 export async function putEntry(id: number, content?: string, pinned?: boolean) {
-  const response: EntrySchema = await invoke("update_entry", {
+  const response: CommandResponse<EntrySchema> = await invoke("update_entry", {
     id,
     content,
     pinned,
   });
-  return response;
+
+  if (response.error) {
+    throw response.error;
+  }
+
+  return response.data!;
 }

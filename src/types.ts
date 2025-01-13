@@ -5,3 +5,9 @@ export type EntrySchema = {
   updated_at: string | null;
   pinned: boolean;
 };
+
+export type Pagination = {
+  entries: EntrySchema[];
+  has_next: boolean;
+  total: number;
+};

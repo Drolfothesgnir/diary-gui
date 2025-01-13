@@ -1,4 +1,5 @@
-use diary_core::{db::SortOrder, Config, DiaryDB, Entry};
+use diary_core::{db::SortOrder, Config, DiaryDB, Entry, Pagination};
+use tauri::Manager;
 use tokio::sync::mpsc;
 
 // Channel message types remain the same
@@ -19,7 +20,7 @@ pub enum DBRequest {
         sort: Option<SortOrder>,
         pinned: Option<bool>,
         substring: Option<String>,
-        response_tx: mpsc::Sender<Result<Vec<Entry>, String>>,
+        response_tx: mpsc::Sender<Result<Pagination, String>>,
     },
     UpdateEntry {
         id: i64,
@@ -71,7 +72,7 @@ impl DiaryState {
                     } => {
                         let result = db
                             .db
-                            .read_entries(page, per_page, sort, pinned, substring)
+                            .read_entries_with_pagination(page, per_page, sort, pinned, substring)
                             .await
                             .map_err(|e| e.to_string());
                         let _ = response_tx.send(result).await;
@@ -182,7 +183,7 @@ async fn read_entries(
     sort: Option<SortOrder>,
     pinned: Option<bool>,
     substring: Option<String>,
-) -> Result<CommandResponse<Vec<Entry>>, String> {
+) -> Result<CommandResponse<Pagination>, String> {
     let (response_tx, mut response_rx) = mpsc::channel(1);
 
     state
@@ -199,7 +200,7 @@ async fn read_entries(
         .map_err(|e| e.to_string())?;
 
     match response_rx.recv().await {
-        Some(Ok(entries)) => Ok(CommandResponse::success(entries)),
+        Some(Ok(pagination)) => Ok(CommandResponse::success(pagination)),
         Some(Err(e)) => Ok(CommandResponse::error(e)),
         None => Ok(CommandResponse::error("Failed to receive response")),
     }
@@ -263,6 +264,20 @@ async fn main() {
         .expect("Failed to create diary state");
 
     tauri::Builder::default()
+        .setup(|app| {
+            // Get path to config directory
+            let config_path = app
+                .path()
+                .app_config_dir()
+                .expect("Failed to get config dir");
+            println!("Config directory: {:?}", config_path);
+
+            // Or get path to app data directory
+            let data_path = app.path().app_data_dir().expect("Failed to get data dir");
+            println!("Data directory: {:?}", data_path);
+
+            Ok(())
+        })
         .manage(diary_state)
         .invoke_handler(tauri::generate_handler![
             create_entry,

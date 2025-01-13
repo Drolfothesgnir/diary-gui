@@ -20,11 +20,9 @@ export async function loadEntries(pinned?: boolean) {
   const currentPage = get(page);
   const currentPerPage = get(perPage);
 
-  const { items, has_next } = await getEntries(
-    currentPage,
-    currentPerPage,
-    pinned
-  );
+  const pagination = await getEntries(currentPage, currentPerPage, pinned);
+  const { entries: items, has_next } = pagination;
+
   entries.update((currentEntries) => currentEntries.concat(items));
   hasNext.set(has_next);
   page.update((n) => n + 1); // Increment page number after loading
@@ -35,16 +33,12 @@ export async function initialFetch(
   per_page?: number,
   pinned?: boolean,
   s?: string,
-  sort = "last"
+  sort = "DESC"
 ) {
   const currentPerPage = per_page || get(perPage);
-  const { items, has_next } = await getEntries(
-    page_i,
-    currentPerPage,
-    pinned,
-    s,
-    sort
-  );
+  const pagination = await getEntries(page_i, currentPerPage, pinned, s, sort);
+
+  const { entries: items, has_next } = pagination;
 
   entries.update(() => items);
   hasNext.set(has_next);
@@ -53,17 +47,17 @@ export async function initialFetch(
 
 // Function to add a new entry
 export async function addEntry(content: string, pinned?: boolean) {
-  const response = await createEntry(content, pinned);
-  entries.update((currentEntries) => [response, ...currentEntries]); // Add new entry to the beginning
+  const entry = await createEntry(content, pinned);
+  entries.update((currentEntries) => [entry, ...currentEntries]); // Add new entry to the beginning
 }
 
 // Function to edit an entry
 export async function editEntry(id: number, content: string) {
-  const response = await putEntry(id, content);
+  const entry = await putEntry(id, content);
   entries.update((currentEntries) => {
     const index = currentEntries.findIndex((entry) => entry.id === id);
     const updatedEntries = [...currentEntries];
-    updatedEntries[index] = response;
+    updatedEntries[index] = entry;
     return updatedEntries;
   });
 }
@@ -78,10 +72,11 @@ export async function removeEntry(id: number) {
 
 // Function to toggle pinned status
 export async function togglePinEntry(id: number, pinned: boolean) {
-  const response = await putEntry(id, undefined, pinned);
+  const entry = await putEntry(id, undefined, pinned);
   entries.update((currentEntries) => {
     const index = currentEntries.findIndex((entry) => entry.id === id);
     const updatedEntries = [...currentEntries];
+    updatedEntries[index] = entry;
     return updatedEntries;
   });
 }
