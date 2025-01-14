@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use diary_core::{db::SortOrder, Config, DiaryDB, Entry, Pagination};
 use tauri::Manager;
 use tokio::sync::mpsc;
