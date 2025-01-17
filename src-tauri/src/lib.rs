@@ -1,7 +1,11 @@
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+
 use diary_core::{db::SortOrder, Config, DiaryDB, Entry, Pagination};
 use tauri::Manager;
 use tokio::sync::mpsc;
-
 // Channel message types remain the same
 #[derive(Debug)]
 pub enum DBRequest {
@@ -32,77 +36,112 @@ pub enum DBRequest {
         id: i64,
         response_tx: mpsc::Sender<Result<(), String>>,
     },
+    Shutdown,
 }
 
 // DiaryState remains the same
 pub struct DiaryState {
     request_tx: mpsc::Sender<DBRequest>,
+    shutdown_tx: mpsc::Sender<()>,
+    is_shutting_down: Arc<AtomicBool>,
 }
 
 impl DiaryState {
     pub async fn new(config: Config) -> Result<Self, String> {
         // Implementation remains the same
         let (request_tx, mut request_rx) = mpsc::channel::<DBRequest>(32);
+        let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
+        let is_shutting_down = Arc::new(AtomicBool::new(false));
         let db = DiaryDB::new(&config.db_url)
             .await
             .map_err(|e| e.to_string())?;
 
         tokio::spawn(async move {
-            while let Some(request) = request_rx.recv().await {
-                match request {
-                    DBRequest::CreateEntry {
-                        content,
-                        pinned,
-                        response_tx,
-                    } => {
-                        let result = db
-                            .db
-                            .create_entry(content, pinned)
-                            .await
-                            .map_err(|e| e.to_string());
-                        let _ = response_tx.send(result).await;
-                    }
-                    DBRequest::ReadEntries {
-                        page,
-                        per_page,
-                        sort,
-                        pinned,
-                        substring,
-                        response_tx,
-                    } => {
-                        let result = db
-                            .db
-                            .read_entries_with_pagination(page, per_page, sort, pinned, substring)
-                            .await
-                            .map_err(|e| e.to_string());
-                        let _ = response_tx.send(result).await;
-                    }
-                    DBRequest::ReadEntry { id, response_tx } => {
-                        let result = db.db.read_entry(id).await.map_err(|e| e.to_string());
-                        let _ = response_tx.send(result).await;
-                    }
-                    DBRequest::UpdateEntry {
-                        id,
-                        content,
-                        pinned,
-                        response_tx,
-                    } => {
-                        let result = db
-                            .db
-                            .update_entry(id, content, pinned)
-                            .await
-                            .map_err(|e| e.to_string());
-                        let _ = response_tx.send(result).await;
-                    }
-                    DBRequest::DeleteEntry { id, response_tx } => {
-                        let result = db.db.delete_entry(id).await.map_err(|e| e.to_string());
-                        let _ = response_tx.send(result).await;
-                    }
-                }
-            }
+            let mut running = true;
+
+            tokio::select! {
+                            _ = async {
+                                loop {
+                                    if !running {
+                                        break;
+                                    }
+                                    let request = request_rx.recv().await;
+                                    println!("Received request: {:?}", request);
+                                    match request {
+                                        Some(DBRequest::Shutdown) => {
+                                            println!("SHUTDOWN!!!");
+                                            running = false;
+                                            db.db.close().await;
+                                        },
+                                        Some(DBRequest::CreateEntry {
+                                            content,
+                                            pinned,
+                                            response_tx,
+                                        }) => {
+                                            let result = db
+                                                .db
+                                                .create_entry(content, pinned)
+                                                .await
+                                                .map_err(|e| e.to_string());
+                                            let _ = response_tx.send(result).await;
+                                        }
+                                        Some(DBRequest::ReadEntries {
+                                            page,
+                                            per_page,
+                                            sort,
+                                            pinned,
+                                            substring,
+                                            response_tx,
+                                        }) => {
+                                            let result = db
+                                                .db
+                                                .read_entries_with_pagination(page, per_page, sort, pinned, substring)
+                                                .await
+                                                .map_err(|e| e.to_string());
+                                            let _ = response_tx.send(result).await;
+                                        }
+                                        Some(DBRequest::ReadEntry { id, response_tx }) => {
+                                            let result = db.db.read_entry(id).await.map_err(|e| e.to_string());
+                                            let _ = response_tx.send(result).await;
+                                        }
+                                        Some(DBRequest::UpdateEntry {
+                                            id,
+                                            content,
+                                            pinned,
+                                            response_tx,
+                                        }) => {
+                                            let result = db
+                                                .db
+                                                .update_entry(id, content, pinned)
+                                                .await
+                                                .map_err(|e| e.to_string());
+                                            let _ = response_tx.send(result).await;
+                                        }
+                                        Some(DBRequest::DeleteEntry { id, response_tx }) => {
+                                            let result = db.db.delete_entry(id).await.map_err(|e| e.to_string());
+                                            let _ = response_tx.send(result).await;
+                                        },
+                                        None => break,
+                                    }
+                                }} => {},
+                                _ = shutdown_rx.recv() => {
+            db.db.close().await;
+                                }
+                            }
         });
 
-        Ok(Self { request_tx })
+        Ok(Self {
+            request_tx,
+            shutdown_tx,
+            is_shutting_down,
+        })
+    }
+
+    pub async fn shutdown(&self) -> Result<(), String> {
+        self.request_tx
+            .send(DBRequest::Shutdown)
+            .await
+            .map_err(|e| e.to_string())
     }
 }
 
@@ -264,21 +303,39 @@ pub async fn run() {
         .expect("Failed to create diary state");
 
     tauri::Builder::default()
-        .setup(|app| {
-            // Get path to config directory
-            let config_path = app
-                .path()
-                .app_config_dir()
-                .expect("Failed to get config dir");
-            println!("Config directory: {:?}", config_path);
-
-            // Or get path to app data directory
-            let data_path = app.path().app_data_dir().expect("Failed to get data dir");
-            println!("Data directory: {:?}", data_path);
-
-            Ok(())
-        })
         .manage(diary_state)
+        .on_window_event(move |window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Get what we need from state first
+                let tx = {
+                    let state = window.state::<DiaryState>();
+                    if state.is_shutting_down.load(Ordering::SeqCst) {
+                        println!("Already shutting down, proceeding with close");
+                        return;
+                    }
+                    state.is_shutting_down.store(true, Ordering::SeqCst);
+                    state.request_tx.clone() // Clone the sender
+                };
+
+                println!("Starting shutdown process");
+
+                // Now use the cloned sender
+                let window = window.clone();
+                std::thread::spawn(move || {
+                    let rt = tokio::runtime::Runtime::new().unwrap();
+                    rt.block_on(async move {
+                        println!("Sending shutdown request");
+                        if let Err(e) = tx.send(DBRequest::Shutdown).await {
+                            eprintln!("Failed to send shutdown request: {}", e);
+                        }
+                        println!("Shutdown request sent, closing window");
+                        let _ = window.close();
+                    });
+                });
+
+                api.prevent_close();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             create_entry,
             read_entry,
