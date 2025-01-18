@@ -1,9 +1,9 @@
+use diary_core::{db::SortOrder, Config, DiaryDB, Entry, Pagination};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-
-use diary_core::{db::SortOrder, Config, DiaryDB, Entry, Pagination};
+use std::{fs, io, path::PathBuf};
 use tauri::Manager;
 use tokio::sync::mpsc;
 // Channel message types remain the same
@@ -65,11 +65,9 @@ impl DiaryState {
                                     if !running {
                                         break;
                                     }
-                                    let request = request_rx.recv().await;
-                                    println!("Received request: {:?}", request);
-                                    match request {
+
+                                    match request_rx.recv().await {
                                         Some(DBRequest::Shutdown) => {
-                                            println!("SHUTDOWN!!!");
                                             running = false;
                                             db.db.close().await;
                                         },
@@ -303,6 +301,22 @@ pub async fn run() {
         .expect("Failed to create diary state");
 
     tauri::Builder::default()
+        .setup(|app| {
+            let exe_path = std::env::current_exe()?;
+            let exe_dir = exe_path.parent().expect("Failed to get exe directory");
+            let config_path = exe_dir.join("config.ini");
+            println!("{:?}", config_path);
+            // let config = Config::from_file("config.ini").unwrap_or_else(|_| Config {
+            //     db_url: String::from("sqlite://diary.db"),
+            // });
+
+            // let diary_state = DiaryState::new(config)
+            //     .await
+            //     .expect("Failed to create diary state");
+            // app.manage(diary_state);
+
+            Ok(())
+        })
         .manage(diary_state)
         .on_window_event(move |window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
