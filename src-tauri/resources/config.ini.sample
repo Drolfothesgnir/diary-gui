@@ -1,0 +1,4 @@
+[Database]
+# url = postgres://postgres:password@localhost:5432/diary
+url = sqlite://diary.db
+

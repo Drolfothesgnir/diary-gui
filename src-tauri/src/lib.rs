@@ -4,7 +4,7 @@ use std::sync::{
     Arc,
 };
 use std::{fs, io, path::PathBuf};
-use tauri::Manager;
+use tauri::{path::BaseDirectory, Manager};
 use tokio::sync::mpsc;
 // Channel message types remain the same
 #[derive(Debug)]
@@ -292,32 +292,36 @@ async fn delete_entry(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub async fn run() {
-    let config = Config::from_file("config.ini").unwrap_or_else(|_| Config {
-        db_url: String::from("sqlite://diary.db"),
-    });
-
-    let diary_state = DiaryState::new(config)
-        .await
-        .expect("Failed to create diary state");
-
     tauri::Builder::default()
         .setup(|app| {
             let exe_path = std::env::current_exe()?;
             let exe_dir = exe_path.parent().expect("Failed to get exe directory");
+            // Define the path to the config file
             let config_path = exe_dir.join("config.ini");
-            println!("{:?}", config_path);
-            // let config = Config::from_file("config.ini").unwrap_or_else(|_| Config {
-            //     db_url: String::from("sqlite://diary.db"),
-            // });
-
-            // let diary_state = DiaryState::new(config)
-            //     .await
-            //     .expect("Failed to create diary state");
-            // app.manage(diary_state);
-
+            fs::create_dir_all(&config_path)?;
+            // Read or create the config file
+            if !config_path.exists() {
+                // Resolve the resource path for config.ini.sample
+                let resource_path = app
+                    .path()
+                    .resolve("config.ini.sample", BaseDirectory::Resource)
+                    .expect("Failed to resolve resource path");
+                // Copy contents from config.ini.sample to config.ini
+                fs::copy(resource_path, &config_path).expect("Failed to copy default config file");
+            }
+            // Use the Config::from_file method to read and parse the configuration
+            let config =
+                Config::from_file(&config_path).expect("Failed to load or parse config file");
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let diary_state = rt.block_on(async {
+                DiaryState::new(config)
+                    .await
+                    .expect("Failed to create diary state")
+            });
+            // Manage the config state in Tauri
+            app.manage(diary_state);
             Ok(())
         })
-        .manage(diary_state)
         .on_window_event(move |window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Get what we need from state first
