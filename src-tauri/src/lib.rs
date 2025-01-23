@@ -1,9 +1,10 @@
 use diary_core::{db::SortOrder, Config, DiaryDB, Entry, Pagination};
+use std::fs::File;
+use std::io::{self};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use std::{fs, io, path::PathBuf};
 use tauri::{path::BaseDirectory, Manager};
 use tokio::sync::mpsc;
 // Channel message types remain the same
@@ -293,35 +294,59 @@ async fn delete_entry(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub async fn run() {
     tauri::Builder::default()
-        .setup(|app| {
-            let exe_path = std::env::current_exe()?;
-            let exe_dir = exe_path.parent().expect("Failed to get exe directory");
-            // Define the path to the config file
-            let config_path = exe_dir.join("config.ini");
-            fs::create_dir_all(&config_path)?;
-            // Read or create the config file
-            if !config_path.exists() {
-                // Resolve the resource path for config.ini.sample
+        // .manage(diary_state)
+        .setup(move |app| {
+            let config_path = std::env::current_exe()
+                .unwrap()
+                .parent()
+                .expect("Failed to get cwd")
+                .join("config.ini");
+
+            println!("[Setup] Config path: {:?}", config_path);
+
+            let mut config_file = File::options()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(&config_path)
+                .map_err(|e| {
+                    println!("Failed to open config file: {:?}", e);
+                    e
+                })
+                .unwrap();
+
+            if config_file.metadata().unwrap().len() == 0 {
                 let resource_path = app
                     .path()
-                    .resolve("config.ini.sample", BaseDirectory::Resource)
+                    .resolve("resources/config.ini.sample", BaseDirectory::Resource)
                     .expect("Failed to resolve resource path");
-                // Copy contents from config.ini.sample to config.ini
-                fs::copy(resource_path, &config_path).expect("Failed to copy default config file");
+                println!("[Setup] resource path {:?}", resource_path);
+                let mut config_sample_file = File::options()
+                    .read(true)
+                    .write(true)
+                    .create(true)
+                    .open(&resource_path)
+                    .map_err(|e| {
+                        println!("[Setup] Failed to open sample config file: {:?}", e);
+                        e
+                    })
+                    .unwrap();
+
+                io::copy(&mut config_sample_file, &mut config_file)
+                    .expect("[Setup] Failed to copy config sample into working directory.");
             }
-            // Use the Config::from_file method to read and parse the configuration
-            let config =
-                Config::from_file(&config_path).expect("Failed to load or parse config file");
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let diary_state = rt.block_on(async {
-                DiaryState::new(config)
+
+            let diary_state = futures::executor::block_on(async {
+                DiaryState::new(Config::from_file(config_path).unwrap())
                     .await
-                    .expect("Failed to create diary state")
+                    .unwrap()
             });
-            // Manage the config state in Tauri
+
             app.manage(diary_state);
+
             Ok(())
         })
+        // .manage(diary_state)
         .on_window_event(move |window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Get what we need from state first
