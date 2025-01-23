@@ -364,16 +364,13 @@ pub async fn run() {
 
                 // Now use the cloned sender
                 let window = window.clone();
-                std::thread::spawn(move || {
-                    let rt = tokio::runtime::Runtime::new().unwrap();
-                    rt.block_on(async move {
-                        println!("Sending shutdown request");
-                        if let Err(e) = tx.send(DBRequest::Shutdown).await {
-                            eprintln!("Failed to send shutdown request: {}", e);
-                        }
-                        println!("Shutdown request sent, closing window");
-                        let _ = window.close();
-                    });
+                futures::executor::block_on(async move {
+                    println!("Sending shutdown request");
+                    if let Err(e) = tx.send(DBRequest::Shutdown).await {
+                        eprintln!("Failed to send shutdown request: {}", e);
+                    }
+                    println!("Shutdown request sent, closing window");
+                    let _ = window.close();
                 });
 
                 api.prevent_close();
