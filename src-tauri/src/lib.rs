@@ -37,6 +37,9 @@ pub enum DBRequest {
         id: i64,
         response_tx: mpsc::Sender<Result<(), String>>,
     },
+    DumpEntries {
+        response_tx: mpsc::Sender<Result<(), String>>,
+    },
     Shutdown,
 }
 
@@ -118,6 +121,10 @@ impl DiaryState {
                                         }
                                         Some(DBRequest::DeleteEntry { id, response_tx }) => {
                                             let result = db.db.delete_entry(id).await.map_err(|e| e.to_string());
+                                            let _ = response_tx.send(result).await;
+                                        },
+                                        Some(DBRequest::DumpEntries {response_tx}) => {
+                                            let result = db.db.dump_entries(None).await.map_err(|e| e.to_string());
                                             let _ = response_tx.send(result).await;
                                         },
                                         None => break,
@@ -291,6 +298,23 @@ async fn delete_entry(
     }
 }
 
+#[tauri::command]
+async fn dump_entries(state: tauri::State<'_, DiaryState>) -> Result<CommandResponse<()>, String> {
+    let (response_tx, mut response_rx) = mpsc::channel(1);
+
+    state
+        .request_tx
+        .send(DBRequest::DumpEntries { response_tx })
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match response_rx.recv().await {
+        Some(Ok(())) => Ok(CommandResponse::success(())),
+        Some(Err(e)) => Ok(CommandResponse::error(e)),
+        None => Ok(CommandResponse::error("Failed to receive response")),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub async fn run() {
     tauri::Builder::default()
@@ -382,6 +406,7 @@ pub async fn run() {
             read_entries,
             update_entry,
             delete_entry,
+            dump_entries,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -16,6 +16,15 @@
     editorState,
     startNewEntry,
   } from "../lib/store/editorStore";
+  import { dumpEntries } from "$lib/utils/requests";
+
+  let dumpingInProcess = false;
+
+  async function onDumpEntriesClick() {
+    dumpingInProcess = true;
+    await dumpEntries();
+    dumpingInProcess = false;
+  }
 
   async function saveEntry(content: string) {
     if ($editorState === EditorState.NEW) {
@@ -69,5 +78,9 @@
     onCloseClick={closeEditor}
   />
 {:else}
-  <NewEntry onClick={startNewEntry} />
+  <NewEntry
+    onNewEntryClick={startNewEntry}
+    dumpEntriesDisabled={dumpingInProcess}
+    {onDumpEntriesClick}
+  />
 {/if}

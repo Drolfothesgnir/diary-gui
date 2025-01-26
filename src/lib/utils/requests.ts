@@ -61,3 +61,13 @@ export async function putEntry(id: number, content?: string, pinned?: boolean) {
 
   return response.data!;
 }
+
+export async function dumpEntries() {
+  const response: CommandResponse<void> = await invoke("dump_entries");
+
+  if (response.error) {
+    throw response.error;
+  }
+
+  return response.data!;
+}
