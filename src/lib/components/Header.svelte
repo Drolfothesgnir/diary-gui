@@ -1,7 +1,123 @@
 <script lang="ts">
+  import type { ChangeEventHandler, EventHandler } from "svelte/elements";
+  import { PinnedFilter, SortOrder } from "../../types";
+
+  type Props = {
+    search: string;
+    pinned: PinnedFilter;
+    sort: SortOrder;
+    onClearClicked: () => void;
+    onSearchChanged: ChangeEventHandler<HTMLInputElement>;
+    onPinnedChange: (pinnedFilter: PinnedFilter) => void;
+    onSortOrderChange: (sortOrder: SortOrder) => void;
+    onSubmit: EventHandler<SubmitEvent, HTMLFormElement>;
+  };
+  let {
+    search,
+    pinned,
+    sort,
+    onClearClicked,
+    onSearchChanged,
+    onPinnedChange,
+    onSortOrderChange,
+    onSubmit,
+  }: Props = $props();
+
+  const pinnedOptions = [
+    {
+      value: PinnedFilter.ALL,
+      label: "All entries",
+    },
+    {
+      value: PinnedFilter.PINNED,
+      label: "Pinned entries",
+    },
+    {
+      value: PinnedFilter.UNPINNED,
+      label: "Unpinned entries",
+    },
+  ];
+
+  const pinnedChangeHandler: ChangeEventHandler<HTMLSelectElement> = (e) => {
+    switch (e.currentTarget.value) {
+      case "ALL":
+        return PinnedFilter.ALL;
+
+      case "PINNED":
+        return PinnedFilter.PINNED;
+
+      case "UNPINNED":
+        return PinnedFilter.UNPINNED;
+
+      default:
+        return PinnedFilter.ALL;
+    }
+  };
+
+  const sortOptions = [
+    {
+      value: SortOrder.ASC,
+      label: "Oldest",
+    },
+    {
+      value: SortOrder.DESC,
+      label: "Newest",
+    },
+  ];
+
+  const sortOrderChangeHandler: ChangeEventHandler<HTMLSelectElement> = (e) => {
+    switch (e.currentTarget.value) {
+      case "ASC":
+        return SortOrder.ASC;
+
+      case "DESC":
+        return SortOrder.DESC;
+
+      default:
+        return SortOrder.DESC;
+    }
+  };
 </script>
 
-<header class="header">hello</header>
+<header class="header">
+  <div class="header-filters">
+    <form onsubmit={onSubmit} class="search-controls">
+      <button class="clear-button" onclick={onClearClicked}>Clear</button>
+      <div class="string-search">
+        <input
+          type="text"
+          class="search-input"
+          bind:value={search}
+          onchange={onSearchChanged}
+          placeholder="Search for a substring"
+        />
+      </div>
+      <div class="pinned-filter">
+        <select
+          class="search-select"
+          bind:value={pinned}
+          onchange={(e) => onPinnedChange(pinnedChangeHandler(e))}
+        >
+          {#each pinnedOptions as option}
+            <option value={option.value}>{option.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="sort-order">
+        <select
+          class="search-select"
+          bind:value={sort}
+          onchange={(e) => onSortOrderChange(sortOrderChangeHandler(e))}
+        >
+          {#each sortOptions as option}
+            <option value={option.value}>{option.label}</option>
+          {/each}
+        </select>
+      </div>
+      <button class="search-button">Search</button>
+    </form>
+  </div>
+</header>
 
 <style lang="scss">
   .header {
@@ -10,47 +126,112 @@
     background-color: #b3d4fc;
     display: flex;
     justify-content: center;
+  }
 
-    // nav {
-    //   width: 50%;
-    //   max-width: 600px;
+  .search-controls {
+    padding: 1rem;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
 
-    //   ul {
-    //     list-style: none;
-    //     display: flex;
+  .clear-button {
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 14px;
+    line-height: 1.5;
+    cursor: pointer;
+    transition: background-color 0.15s ease-in-out;
 
-    //     li {
-    //       & + li {
-    //         margin-left: 10px;
-    //       }
+    &:hover {
+      background-color: #bb2d3b;
+    }
 
-    //       a {
-    //         color: #333; /* Основной цвет текста ссылок */
-    //         text-decoration: none; /* Убираем подчеркивание */
-    //         padding: 10px 15px; /* Отступы для каждой ссылки */
-    //         border-radius: 4px; /* Закругление углов */
-    //         transition:
-    //           background-color 0.3s ease,
-    //           color 0.3s ease;
+    &:active {
+      background-color: #a52834;
+    }
 
-    //         &:hover {
-    //           background-color: #f0f0f0; /* Фон при наведении */
-    //           color: #007bff; /* Цвет текста при наведении */
-    //         }
+    &:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.25);
+    }
+  }
 
-    //         &:active {
-    //           background-color: #007bff; /* Фон активной ссылки */
-    //           color: white; /* Цвет текста активной ссылки */
-    //         }
+  .search-input {
+    background-color: white;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 14px;
+    line-height: 1.5;
+    flex: 1;
+    min-width: 200px;
 
-    //         &.current {
-    //           background-color: #0056b3; /* Темный фон для текущей страницы */
-    //           color: white; /* Белый текст */
-    //           font-weight: bold;
-    //         }
-    //       }
-    //     }
-    //   }
-    // }
+    &:hover {
+      border-color: #adb5bd;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: #86b7fe;
+      box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+    }
+  }
+
+  .search-select {
+    appearance: none;
+    background-color: white;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 6px 24px 6px 12px;
+    font-size: 14px;
+    line-height: 1.5;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23495057' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 16px;
+    min-width: 120px;
+
+    &:hover {
+      border-color: #adb5bd;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: #86b7fe;
+      box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+    }
+  }
+
+  .search-button {
+    background-color: #0d6efd;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 14px;
+    line-height: 1.5;
+    cursor: pointer;
+    transition: background-color 0.15s ease-in-out;
+
+    &:hover {
+      background-color: #0b5ed7;
+    }
+
+    &:active {
+      background-color: #0a58ca;
+    }
+
+    &:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+    }
   }
 </style>
