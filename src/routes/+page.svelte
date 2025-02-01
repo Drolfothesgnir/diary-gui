@@ -134,6 +134,8 @@
     pinned = PinnedFilter.ALL;
     search = "";
     sort = SortOrder.DESC;
+    entries = [];
+    loadEntries();
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {

@@ -82,7 +82,9 @@
 <header class="header">
   <div class="header-filters">
     <form onsubmit={onSubmit} class="search-controls">
-      <button class="clear-button" onclick={onClearClicked}>Clear</button>
+      <button class="clear-button" onclick={onClearClicked} type="button"
+        >Clear</button
+      >
       <div class="string-search">
         <input
           type="text"
@@ -114,7 +116,7 @@
           {/each}
         </select>
       </div>
-      <button class="search-button">Search</button>
+      <button class="search-button" type="submit">Search</button>
     </form>
   </div>
 </header>
